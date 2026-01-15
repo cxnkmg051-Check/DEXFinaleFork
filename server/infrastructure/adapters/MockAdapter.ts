@@ -45,28 +45,28 @@ export class MockAdapter implements IChainAdapter {
 
   async getTopPools(limit: number): Promise<Pool[]> {
     // Return mock pools with random variations to simulate live data
-    return this.tokens.map(token => {
-      // Simulate random reserves
+    const poolCount = Math.min(this.tokens.length, limit);
+    const pools: Pool[] = [];
+    
+    for (let i = 0; i < poolCount; i++) {
+      const token = this.tokens[i];
       const basePrice = this.getBasePrice(token.symbol);
       const variation = 1 + (Math.random() * 0.02 - 0.01); // +/- 1%
       const price = basePrice * variation;
 
-      // Create a pool with the stable token
-      // 1 Token = price USDC
-      // ReserveRatio = price
-      
       const stableReserveVal = 1_000_000 * price; // $1M liquidity
       const tokenReserveVal = 1_000_000;
 
-      return {
+      pools.push({
         address: `0xPool_${token.symbol}_${this.chainName}`,
         token0: token,
         token1: this.stableToken,
         reserve0: BigInt(Math.floor(tokenReserveVal * Math.pow(10, token.decimals))),
         reserve1: BigInt(Math.floor(stableReserveVal * Math.pow(10, this.stableToken.decimals))),
         feeTier: 3000 // 0.3%
-      };
-    });
+      });
+    }
+    return pools;
   }
 
   private getBasePrice(symbol: string): number {
@@ -76,6 +76,17 @@ export class MockAdapter implements IChainAdapter {
       case "UNI": return 10;
       case "AAVE": return 120;
       case "LINK": return 18;
+      case "LDO": return 2.5;
+      case "ARB": return 1.2;
+      case "WMATIC": return 0.8;
+      case "USDT": return 1;
+      case "DAI": return 1;
+      case "MKR": return 2800;
+      case "SNX": return 3.5;
+      case "COMP": return 60;
+      case "GRT": return 0.25;
+      case "SUSHI": return 1.1;
+      case "QUICK": return 0.05;
       default: return 1;
     }
   }
