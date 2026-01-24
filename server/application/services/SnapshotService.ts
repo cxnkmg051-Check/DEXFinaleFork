@@ -1,142 +1,46 @@
-import { IChainAdapter } from "../../infrastructure/adapters/MockAdapter";
-import { ChainSnapshot, SnapshotEntry, Token } from "../../domain/entities";
-import { computeSpotPrice, computeLiquidityUSD } from "../../domain/pricing";
-import { SUPPORTED_TOKENS, TokenMetadata } from "../../../shared/tokens";
+import { Token, Pool } from "../../domain/entities";
+import { EthersAdapter } from "../../infrastructure/adapters/EthersAdapter";
 
 export class SnapshotService {
-  private adapters: Map<string, IChainAdapter>;
-  private cache: Map<string, any>;
-  private isUpdating: Map<string, boolean>;
-  private dynamicTokens: Map<string, TokenMetadata[]>;
+  private adapters: EthersAdapter[];
 
-  constructor(adapters: IChainAdapter[]) {
-    this.adapters = new Map();
-    this.cache = new Map();
-    this.isUpdating = new Map();
-    this.dynamicTokens = new Map();
-    adapters.forEach(adapter => this.adapters.set(adapter.getChainName().toLowerCase(), adapter));
-    
-    // Initial fetch of external token lists
-    this.refreshDynamicTokens();
+  constructor(adapters: EthersAdapter[]) {
+    this.adapters = adapters;
   }
 
-  private async refreshDynamicTokens() {
-    try {
-      console.log("Refreshing dynamic token lists...");
-      
-      // Ethereum - Trust Wallet
-      const ethRes = await fetch("https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/tokenlist.json");
-      if (ethRes.ok) {
-        const data = await ethRes.json();
-        this.dynamicTokens.set("ethereum", data.tokens || []);
-      }
+  async bootstrapPools(tokens: Token[]): Promise<Record<string, Pool>> {
+    const pools: Record<string, Pool> = {};
 
-      // Polygon - Official List
-      const polyRes = await fetch("https://raw.githubusercontent.com/maticnetwork/polygon-token-list/master/src/tokens/defaultTokens.json");
-      if (polyRes.ok) {
-        const data = await polyRes.json();
-        this.dynamicTokens.set("polygon", data || []);
-      }
-      
-      console.log(`Loaded ${this.dynamicTokens.get("ethereum")?.length} ETH and ${this.dynamicTokens.get("polygon")?.length} Polygon tokens.`);
-    } catch (e) {
-      console.error("Failed to fetch dynamic tokens:", e);
-    }
-  }
+    for (const adapter of this.adapters) {
+      const chainId = await adapter.getChainId();
+      const chainTokens = tokens.filter(t => t.chainId === chainId);
 
-  async generateSnapshot(chain: string, offset: number = 0, limit: number = 25): Promise<ChainSnapshot> {
-    const chainKey = chain.toLowerCase();
-    const adapter = this.adapters.get(chainKey);
-    if (!adapter) {
-      throw new Error(`No adapter found for chain: ${chain}`);
-    }
+      // Create all possible pairs of tokens for the current chain
+      for (let i = 0; i < chainTokens.length; i++) {
+        for (let j = i + 1; j < chainTokens.length; j++) {
+          const tokenA = chainTokens[i];
+          const tokenB = chainTokens[j];
 
-    // Merge static and dynamic tokens
-    const staticMeta = SUPPORTED_TOKENS[chainKey] || [];
-    const dynamicMeta = this.dynamicTokens.get(chainKey) || [];
-    
-    // De-duplicate by address
-    const seen = new Set(staticMeta.map(t => t.address.toLowerCase()));
-    const allMetadata = [...staticMeta, ...dynamicMeta.filter(t => !seen.has(t.address.toLowerCase()))];
-
-    const windowedMetadata = allMetadata.slice(offset, offset + limit);
-
-    // Filter tokens that need updating (stale or missing)
-    const now = Date.now();
-    
-    // Fetch real pool data in batch
-    const pools = await adapter.getTopPools(50);
-    const poolAddresses = pools.map(p => p.address);
-    const poolStates = await adapter.getBatchPoolData(poolAddresses);
-
-    const entries: SnapshotEntry[] = await Promise.all(windowedMetadata.map(async (meta) => {
-      const cacheKey = `${chainKey}:${meta.address.toLowerCase()}`;
-      const cached = this.cache.get(cacheKey) as any;
-
-      if (cached && (now - cached.timestamp < 10000)) {
-        return cached.entry;
-      }
-
-      // Match token to discovered pools
-      const stableAddress = adapter.getStableTokenAddress().toLowerCase();
-      const metaAddress = meta.address.toLowerCase();
-      
-      const poolData = pools.find(p => 
-        (p.token0.address.toLowerCase() === metaAddress && p.token1.address.toLowerCase() === stableAddress) ||
-        (p.token1.address.toLowerCase() === metaAddress && p.token0.address.toLowerCase() === stableAddress)
-      );
-
-      let price = 0;
-      let liquidity = 0;
-
-      if (poolData) {
-        const state = poolStates.find((s: any) => s.address.toLowerCase() === poolData.address.toLowerCase());
-        if (state) {
-          const enrichedPool = { 
-            ...poolData, 
-            sqrtPriceX96: state.sqrtPriceX96, 
-            liquidity: state.liquidity,
-            token0: poolData.token0.address.toLowerCase() === meta.address.toLowerCase() ? { ...meta } : { symbol: "USDC", name: "USD Coin", address: stableAddress, decimals: 6 },
-            token1: poolData.token1.address.toLowerCase() === meta.address.toLowerCase() ? { ...meta } : { symbol: "USDC", name: "USD Coin", address: stableAddress, decimals: 6 }
-          };
-          price = computeSpotPrice(enrichedPool, meta.address, stableAddress);
-          liquidity = Number(state.liquidity) / 1e18; 
+          // Check for existing pool
+          const poolAddress = await adapter.getPoolAddress(tokenA, tokenB);
+          
+          if (poolAddress && poolAddress !== "0x0000000000000000000000000000000000000000") {
+            const poolData = await adapter.getBatchPoolData([poolAddress]);
+            if (poolData && poolData.length > 0) {
+              const p = poolData[0];
+              pools[poolAddress.toLowerCase()] = {
+                address: p.address,
+                token0: tokenA,
+                token1: tokenB,
+                reserve0: p.reserve0,
+                reserve1: p.reserve1,
+                feeTier: p.feeTier,
+              };
+            }
+          }
         }
       }
-
-      // If no real pool found, use mock fallback for prototype visibility
-      if (price === 0) {
-        price = 1; 
-        liquidity = 500000;
-      }
-
-      const entry: SnapshotEntry = {
-        token: {
-          symbol: meta.symbol,
-          name: meta.name,
-          address: meta.address,
-          decimals: meta.decimals,
-          logoURI: meta.logoURI
-        },
-        priceUSD: price,
-        liquidityUSD: liquidity,
-        volumeUSD: liquidity * 0.15,
-        marketCapUSD: price * 10_000_000
-      };
-
-      // Store in LRU-style cache
-      this.cache.set(cacheKey, { timestamp: now, entry } as any);
-      return entry;
-    }));
-
-    return {
-      timestamp: now,
-      chain: adapter.getChainName(),
-      entries
-    };
-  }
-
-  getLatestSnapshot(chain: string): ChainSnapshot | undefined {
-    return this.cache.get(chain.toLowerCase());
+    }
+    return pools;
   }
 }

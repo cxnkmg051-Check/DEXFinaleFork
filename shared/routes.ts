@@ -14,7 +14,7 @@ export const api = {
   snapshots: {
     getLatest: {
       method: 'GET' as const,
-      path: '/api/snapshot/:chain',
+      path: '/api/snapshot',
       responses: {
         200: snapshotSchema,
         404: errorSchemas.notFound,
