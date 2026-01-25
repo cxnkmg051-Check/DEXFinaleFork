@@ -1,4 +1,7 @@
-import { TokenMetadata } from "../../../shared/tokens";
+interface TokenMetadata {
+  address: string;
+  symbol: string;
+}
 
 interface TokenSelectorProps {
   tokens: TokenMetadata[];

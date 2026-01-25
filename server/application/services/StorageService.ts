@@ -1,10 +1,8 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { Token, Pool } from '../../domain/entities';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = path.join(__dirname, '../../data');
+const DATA_DIR = path.join(process.cwd(), 'data');
 
 export class StorageService {
   async read(fileName: string): Promise<any> {

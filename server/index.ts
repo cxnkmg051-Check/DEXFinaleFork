@@ -3,17 +3,17 @@ import { registerRoutes } from './routes.ts';
 import { EthersAdapter } from './infrastructure/adapters/EthersAdapter';
 import { DiscoveryService } from './application/services/DiscoveryService';
 import { StorageService } from './application/services/StorageService';
-import { ControllerService } from './application/services/ControllerService.ts';
-import { DispatcherService } from './application/services/DispatcherService.ts';
-import { CacheService } from './application/services/CacheService.ts';
-import { RequestBatcher } from './application/services/RequestBatcher.ts';
 import http from 'http';
+import { priceViewerService } from './application/services/PriceViewerService.ts';
+import { sharedStateCache } from './application/services/SharedStateCache.ts';
+import { SwapController } from './application/services/SwapController.ts';
 
 const app = express();
 const server = http.createServer(app);
 
 // Replace body-parser with express.json()
 app.use(express.json());
+app.use(express.static('dist/public'));
 
 // Provide public RPC fallbacks for resilience
 const { ALCHEMY_API_KEY, INFURA_API_KEY, POLYGON_RPC_URL } = process.env;
@@ -50,37 +50,27 @@ const rpcProviders: { [chainId: number]: string } = {
 
 const ethersAdapter = new EthersAdapter(rpcProviders);
 const storageService = new StorageService();
-const cacheService = new CacheService();
-const dispatcherService = new DispatcherService();
-
-const controllerService = new ControllerService(
-  ethersAdapter,
-  storageService,
-  cacheService,
-  dispatcherService
-);
-
-const requestBatcher = new RequestBatcher(controllerService);
 
 app.locals.storageService = storageService;
-app.locals.requestBatcher = requestBatcher;
 
 const discoveryService = new DiscoveryService(storageService, ethersAdapter);
 
 // Run pool discovery in the background
 (async () => {
   try {
-    await discoveryService.discoverPools();
+    await discoveryService.discoverAndPrimeCache();
     console.log('Initial pool discovery complete.');
   } catch (error) {
     console.error('Error during initial pool discovery:', error);
   }
 })();
 
-// Register the routes
-registerRoutes(server, app);
+const swapController = new SwapController(sharedStateCache);
 
-const port = 3002;
+// Register the routes
+registerRoutes(app, priceViewerService, swapController);
+
+const port = process.env.PORT || 3002;
 server.listen(port, () =>
   console.log(`Server is running on port ${port}`)
 );

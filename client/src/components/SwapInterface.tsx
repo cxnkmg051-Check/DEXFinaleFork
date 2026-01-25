@@ -1,8 +1,12 @@
 import { useState } from 'react';
-import { TokenMetadata } from '../../../shared/tokens';
 import { TokenSelector } from './TokenSelector';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '../../../shared/routes';
+import { api } from '@shared/routes';
+
+export interface TokenMetadata {
+  address: string;
+  symbol: string;
+}
 
 interface SwapInterfaceProps {
   tokens: TokenMetadata[];

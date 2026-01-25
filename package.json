@@ -4,7 +4,7 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
-    "dev": "(npm run dev:server & npm run dev:client) &> dev.log",
+    "dev": "NODE_ENV=development tsx server/index.ts",
     "dev:client": "vite",
     "dev:server": "NODE_ENV=development tsx server/index.ts",
     "build": "tsx script/build.ts",

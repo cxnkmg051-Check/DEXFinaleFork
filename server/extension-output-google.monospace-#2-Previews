@@ -873,3 +873,9 @@
 2026-01-25T01:29:57Z [web] > rest-express@1.0.0 dev
 2026-01-25T01:29:57Z [web] > (npm run dev:server & npm run dev:client) &> dev.log
 2026-01-25T01:29:57Z [web] 
+2026-01-25T03:45:33Z [web] <Firebase Studio> Starting preview...
+2026-01-25T03:45:33Z [web] Waiting for your web server to start serving
+2026-01-25T03:45:33Z [web] 
+2026-01-25T03:45:33Z [web] > rest-express@1.0.0 dev
+2026-01-25T03:45:33Z [web] > (npm run dev:server & npm run dev:client) &> dev.log
+2026-01-25T03:45:33Z [web] 

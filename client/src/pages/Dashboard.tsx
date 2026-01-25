@@ -1,7 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@shared/routes';
-import { SwapInterface } from '@/components/SwapInterface';
-import { TokenMetadata } from '@shared/tokens';
+import { SwapInterface, TokenMetadata } from '@/components/SwapInterface';
 import { Sidebar } from '@/components/ui/sidebar';
 
 export default function Dashboard() {

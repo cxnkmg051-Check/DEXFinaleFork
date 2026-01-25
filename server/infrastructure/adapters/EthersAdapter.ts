@@ -1,8 +1,15 @@
 import { Pool, Token } from "../../domain/entities";
 import { ethers, BaseContract } from "ethers";
+import { PoolState, TokenMetadata } from "../../domain/types";
 
 const MULTICALL_ADDRESS = "0xca11bde05977b3631167028862be2a173976ca11";
 const UNISWAP_V3_FACTORY = "0x1F98431c8aD98523631AE4a59f267346ea31F984";
+
+const ERC20_ABI = [
+    "function name() view returns (string)",
+    "function symbol() view returns (string)",
+    "function decimals() view returns (uint8)"
+];
 
 const MULTICALL_ABI = [
   "function aggregate(tuple(address target, bytes callData)[] calls) view returns (uint256 blockNumber, bytes[] returnData)"
@@ -38,6 +45,28 @@ export class EthersAdapter {
     return provider;
   }
 
+  async getTokenMetadata(tokenAddress: string, chainId: number): Promise<TokenMetadata> {
+    const provider = this.getProvider(chainId);
+    const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, provider);
+    const [name, symbol, decimals] = await Promise.all([
+        tokenContract.name(),
+        tokenContract.symbol(),
+        tokenContract.decimals(),
+    ]);
+    return { name, symbol, decimals };
+  }
+
+  async getPoolState(poolAddress: string, chainId: number): Promise<PoolState> {
+    const provider = this.getProvider(chainId);
+    const poolContract = new ethers.Contract(poolAddress, POOL_ABI, provider);
+    const slot0 = await poolContract.slot0();
+    const liquidity = await poolContract.liquidity();
+    return {
+        liquidity: BigInt(liquidity.toString()),
+        sqrtPriceX96: BigInt(slot0.sqrtPriceX96.toString()),
+    };
+  }
+
   async getPoolAddress(tokenA: Token, tokenB: Token, chainId: number, fee: number): Promise<string | null> {
     const provider = this.getProvider(chainId);
     const factory = this.factory.connect(provider);
@@ -48,71 +77,17 @@ export class EthersAdapter {
     return null;
   }
 
-  async getBatchPoolData(poolAddresses: string[], chainId: number): Promise<Pool[]> {
-    if (poolAddresses.length === 0) return [];
-
-    const provider = this.getProvider(chainId);
-    const multicall = new ethers.Contract(MULTICALL_ADDRESS, MULTICALL_ABI, provider);
-    const poolInterface = new ethers.Interface(POOL_ABI);
-
-    const validAddresses = poolAddresses.filter(addr => addr && ethers.isAddress(addr));
-    if (validAddresses.length === 0) return [];
-
-    const calls = validAddresses.flatMap(address => [
-      { target: address, callData: poolInterface.encodeFunctionData("slot0") },
-      { target: address, callData: poolInterface.encodeFunctionData("liquidity") },
-      { target: address, callData: poolInterface.encodeFunctionData("fee") }
-    ]);
-
-    try {
-      const [, returnData] = await multicall.aggregate(calls);
-
-      const results: Pool[] = [];
-      for (let i = 0; i < validAddresses.length; i++) {
-        try {
-          const slot0Data = poolInterface.decodeFunctionResult("slot0", returnData[i * 3]);
-          const liquidityData = poolInterface.decodeFunctionResult("liquidity", returnData[i * 3 + 1]);
-          const feeData = poolInterface.decodeFunctionResult("fee", returnData[i * 3 + 2]);
-
-          results.push({
-            address: validAddresses[i],
-            sqrtPriceX96: BigInt(slot0Data.sqrtPriceX96.toString()),
-            liquidity: BigInt(liquidityData[0].toString()),
-            reserve0: BigInt(0), // Not directly available in V3, needs calculation
-            reserve1: BigInt(0), // Not directly available in V3, needs calculation
-            token0: {} as Token, // Placeholder
-            token1: {} as Token, // Placeholder
-            feeTier: feeData[0],
-          });
-        } catch (e) {
-          continue;
-        }
-      }
-      return results;
-    } catch (error) {
-      console.error("Multicall aggregate failed:", error);
-      return [];
-    }
-  }
-
-  async getChainId(): Promise<number> {
-    const network = await this.providers[1].getNetwork();
-    return Number(network.chainId);
-  }
-
-  async getPools(tokenA: Token, tokenB: Token): Promise<Pool[]> {
+  async getPools(tokenA: Token, tokenB: Token): Promise<PoolState[]> {
     const chainId = tokenA.chainId;
     const feeTiers = [100, 500, 3000, 10000];
-    const pools: Pool[] = [];
+    const pools: PoolState[] = [];
 
     for (const fee of feeTiers) {
       const poolAddress = await this.getPoolAddress(tokenA, tokenB, chainId, fee);
 
       if (poolAddress) {
-        const poolData = await this.getBatchPoolData([poolAddress], chainId);
-        if (poolData.length > 0) {
-          pools.push({ ...poolData[0], token0: tokenA, token1: tokenB });
-        }
+        const poolState = await this.getPoolState(poolAddress, chainId);
+        pools.push(poolState);
       }
     }
 

@@ -1,6 +1,9 @@
+
 import { EthersAdapter } from '../../infrastructure/adapters/EthersAdapter';
 import { StorageService } from './StorageService';
 import { Token } from '../../domain/entities';
+import { sharedStateCache } from './SharedStateCache';
+import { PoolState, TokenMetadata } from '../../domain/types';
 
 export class DiscoveryService {
   constructor(
@@ -8,9 +11,23 @@ export class DiscoveryService {
     private readonly ethersAdapter: EthersAdapter,
   ) {}
 
-  async discoverPools(): Promise<void> {
-    console.log('Starting pool discovery...');
+  async discoverAndPrimeCache(): Promise<void> {
+    console.log('Starting pool and token discovery to prime the cache...');
     const tokens: Token[] = await this.storageService.getTokens();
+
+    // 1. Prime Token Metadata
+    for (const token of tokens) {
+      try {
+        // Assuming EthersAdapter has a method to get token metadata
+        const metadata: TokenMetadata = await this.ethersAdapter.getTokenMetadata(token.address, token.chainId);
+        sharedStateCache.setTokenMetadata(token.address, metadata);
+      } catch (error: any) {
+        console.error(`Error fetching metadata for ${token.symbol}:`, error.message);
+      }
+    }
+    console.log('Token metadata cache priming complete.');
+
+    // 2. Discover Pools and Prime their State
     const tokensByChain = tokens.reduce((acc, token) => {
       if (!acc[token.chainId]) {
         acc[token.chainId] = [];
@@ -19,16 +36,12 @@ export class DiscoveryService {
       return acc;
     }, {} as Record<number, Token[]>);
 
-    const feeTiers = [100, 500, 3000, 10000]; // Common Uniswap V3 fee tiers
+    const feeTiers = [100, 500, 3000, 10000];
 
     for (const chainId in tokensByChain) {
       const chainTokens = tokensByChain[chainId];
       const chainIdNum = parseInt(chainId, 10);
-      console.log(`Discovering pools for chain ID: ${chainIdNum} with ${chainTokens.length} tokens...`);
-
-      const poolsFileName = `pools_${chainIdNum === 1 ? 'ethereum' : 'polygon'}.json`;
-      const existingPools = await this.storageService.read(poolsFileName);
-      let newPoolsFound = 0;
+      console.log(`Discovering pools for chain ID: ${chainIdNum}...`);
 
       for (let i = 0; i < chainTokens.length; i++) {
         for (let j = i + 1; j < chainTokens.length; j++) {
@@ -36,34 +49,35 @@ export class DiscoveryService {
           const tokenB = chainTokens[j];
 
           for (const fee of feeTiers) {
-            const poolKey = `${tokenA.address}_${tokenB.address}_${fee}`;
-            const reversePoolKey = `${tokenB.address}_${tokenA.address}_${fee}`;
-
-            if (existingPools[poolKey] || existingPools[reversePoolKey]) {
-              continue;
-            }
-
             try {
               const poolAddress = await this.ethersAdapter.getPoolAddress(tokenA, tokenB, chainIdNum, fee);
               if (poolAddress) {
-                existingPools[poolKey] = poolAddress;
-                newPoolsFound++;
+                // 3. Fetch initial pool state and prime cache
+                const poolState: PoolState = await this.ethersAdapter.getPoolState(poolAddress, chainIdNum);
+                sharedStateCache.setPoolState(poolAddress, poolState);
               }
             } catch (error: any) {
-              console.error(`Error finding pool for ${tokenA.symbol}-${tokenB.symbol} on chain ${chainIdNum} with fee ${fee}:`, error.message);
+              // It's common for pools not to exist, so we can log this less verbosely
+              // console.log(`Info: Pool not found for ${tokenA.symbol}-${tokenB.symbol} with fee ${fee}`);
             }
           }
         }
       }
-
-      if (newPoolsFound > 0) {
-        console.log(`Found ${newPoolsFound} new pools for chain ID: ${chainIdNum}. Saving to ${poolsFileName}...`);
-        await this.storageService.write(poolsFileName, existingPools);
-      } else {
-        console.log(`No new pools found for chain ID: ${chainIdNum}.`);
-      }
     }
 
-    console.log('Pool discovery finished.');
+    console.log('Pool discovery and cache priming finished.');
+  }
+
+  /**
+   * Periodically refreshes the state of all known pools in the cache.
+   */
+  async refreshPools(): Promise<void> {
+    // This is a placeholder for a more sophisticated refresh mechanism.
+    // In a real application, you'd get the list of pools from the cache keys
+    // and update them in batches.
+    console.log('Refreshing pool states...');
+    // This is where we would iterate through the cached pools and update their state
+    // For now, we will re-discover to refresh
+    await this.discoverAndPrimeCache();
   }
 }
