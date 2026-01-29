@@ -50,7 +50,7 @@ class RpcConfig {
    * ADD NEW PROVIDERS HERE
    */
   private initializeProviders(): void {
-    const infuraKey = process.env.INFURA_API_KEY || '84842078b09946638c03157f83405213';
+    const infuraKey = process.env.INFURA_API_KEY || 'demo';
     const alchemyKey = process.env.ALCHEMY_API_KEY || 'demo';
 
     this.providers = [

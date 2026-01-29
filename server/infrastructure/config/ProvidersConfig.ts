@@ -45,7 +45,7 @@ class ProvidersConfig {
     this.infuraApiKey = process.env.INFURA_API_KEY || '84842078b09946638c03157f83405213';
     this.alchemyApiKey = process.env.ALCHEMY_API_KEY || 'demo';
     this.etherscanApiKey = process.env.ETHERSCAN_API_KEY || 'demo';
-    this.polygonRpcUrl = process.env.POLYGON_RPC_URL || 'https://polygon-rpc.com';
+    this.polygonApiKey = process.env.POLYGON_API_KEY || 'demo'; //WE ALREADY HAVE THESE IM THEIR RESPECTIVE CONFIG FILES. WHAT ARE YOU DUPLICATING THIS FOR?
 
     // Initialize chain providers
     this.chainProviders = {
