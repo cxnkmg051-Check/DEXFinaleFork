@@ -19,6 +19,7 @@
  */
 
 import { StorageService } from './StorageService';
+import { spotPricingEngine } from './SpotPricingEngine';
 import { rpcConfig } from '../../infrastructure/config/RpcConfig';
 import { explorerConfig } from '../../infrastructure/config/ExplorerConfig';
 import { networkConfig } from '../../infrastructure/config/NetworkConfig';
@@ -70,18 +71,22 @@ class MarketViewerService {
       }
     }
 
-    // Fetch from explorer API
-    try {
-      const explorerData = await this.fetchFromExplorerApi(tokenAddress, chainId);
-      if (explorerData) {
-        this.setCacheEntry(cacheKey, explorerData);
-        return explorerData;
+    // Fetch from explorer API to get token metadata
+    let marketData = await this.fetchFromExplorerApi(tokenAddress, chainId);
+    
+    if (marketData) {
+      // Try to get pricing from spot pricing engine
+      const price = spotPricingEngine.computeSpotPrice(tokenAddress, chainId);
+      if (price !== null && price > 0) {
+        marketData.price = price;
+        marketData.dataSource = 'multicall'; // Price came from pool data via multicall
       }
-    } catch (error) {
-      console.warn(`⚠️ Explorer API failed for ${tokenAddress}:`, error);
+      
+      this.setCacheEntry(cacheKey, marketData);
+      return marketData;
     }
 
-    // Fallback: return mock/placeholder data
+    // Fallback: return data with zero pricing
     const fallbackData = this.getMockTokenData(tokenAddress, chainId);
     this.setCacheEntry(cacheKey, fallbackData);
     return fallbackData;
