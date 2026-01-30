@@ -2664,6 +2664,7 @@ The implementation is complete, tested, and ready for deployment. All architectu
 - **Refactor:** Converted `ProvidersConfig` into a thin facade that delegates runtime endpoint selection to `RpcConfig` and `ExplorerConfig`, reducing duplication and preventing config drift. (`server/infrastructure/config/ProvidersConfig.ts`)
 - **Env support:** Added `.env.example` with placeholders for common keys (INFURA_API_KEY, ALCHEMY_API_KEY, ETHERSCAN_API_KEY, POLYGONSCAN_API_KEY, POLYGON_RPC_URL) and added `.env` to `.gitignore` to support local development.
 - **Validation:** Ran `npx tsc --noEmit` (no errors) and performed a dev smoke-start (`npm run dev`) to ensure there were no regressions.
+- **Config hygiene:** Removed public/demo stub keys from `RpcConfig`, `ExplorerConfig`, `ProvidersConfig`, and server startup logic. In production, missing provider keys now cause a startup error (fail-fast). In development, a public RPC fallback will be used and logged explicitly to preserve the local dev experience.
 
 **Rationale:** Centralize provider selection and avoid conflicting configuration between multiple config files; make it straightforward to add API keys locally.
 

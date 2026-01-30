@@ -50,35 +50,52 @@ class RpcConfig {
    * ADD NEW PROVIDERS HERE
    */
   private initializeProviders(): void {
-    const infuraKey = process.env.INFURA_API_KEY || 'demo';
-    const alchemyKey = process.env.ALCHEMY_API_KEY || 'demo';
+    const infuraKey = process.env.INFURA_API_KEY;
+    const alchemyKey = process.env.ALCHEMY_API_KEY;
+    const polygonRpcUrl = process.env.POLYGON_RPC_URL;
 
-    this.providers = [
-      {
+    const providers: RpcProvider[] = [];
+
+    if (infuraKey) {
+      providers.push({
         name: 'Infura',
         endpoints: {
           1: `https://mainnet.infura.io/v3/${infuraKey}`,
           137: `https://polygon-mainnet.infura.io/v3/${infuraKey}`,
         },
-      },
-      {
+      });
+    } else {
+      console.warn('INFURA_API_KEY not provided. Infura provider will be disabled.');
+    }
+
+    if (alchemyKey) {
+      providers.push({
         name: 'Alchemy',
         endpoints: {
           1: `https://eth-mainnet.g.alchemy.com/v2/${alchemyKey}`,
           137: `https://polygon-mainnet.g.alchemy.com/v2/${alchemyKey}`,
         },
-      },
-      // ADD MORE PROVIDERS HERE
-      // {
-      //   name: 'Ankr',
-      //   endpoints: {
-      //     1: 'https://rpc.ankr.com/eth',
-      //     137: 'https://rpc.ankr.com/polygon',
-      //   },
-      // },
-    ];
+      });
+    } else {
+      console.warn('ALCHEMY_API_KEY not provided. Alchemy provider will be disabled.');
+    }
 
-    console.log(`✓ RpcConfig: Initialized ${this.providers.length} RPC providers`);
+    if (polygonRpcUrl) {
+      providers.push({
+        name: 'PublicPolygon',
+        endpoints: {
+          137: polygonRpcUrl,
+        },
+      });
+    }
+
+    this.providers = providers;
+
+    if (providers.length === 0) {
+      console.warn('⚠️ RpcConfig: No RPC providers configured. Set INFURA_API_KEY or ALCHEMY_API_KEY or POLYGON_RPC_URL in environment.');
+    } else {
+      console.log(`✓ RpcConfig: Initialized ${this.providers.length} RPC providers: ${this.getAvailableProviders().join(', ')}`);
+    }
   }
 
   /**
@@ -95,16 +112,18 @@ class RpcConfig {
    * @returns RPC endpoint URL
    */
   public getNextRpcEndpoint(chainId: number): string {
-    const counter = this.roundRobinCounters.get(chainId) || 0;
-    const nextIndex = counter % this.providers.length;
-
-    const provider = this.providers[nextIndex];
-    if (!provider || !provider.endpoints[chainId]) {
+    const available = this.providers.filter(p => p.endpoints[chainId]);
+    if (available.length === 0) {
       throw new Error(`No RPC provider available for chain ${chainId}`);
     }
 
+    const counter = this.roundRobinCounters.get(chainId) || 0;
+    const nextIndex = counter % available.length;
+
+    const provider = available[nextIndex];
+
     // Increment counter for next call
-    this.roundRobinCounters.set(chainId, (counter + 1) % this.providers.length);
+    this.roundRobinCounters.set(chainId, (counter + 1) % available.length);
 
     return provider.endpoints[chainId];
   }

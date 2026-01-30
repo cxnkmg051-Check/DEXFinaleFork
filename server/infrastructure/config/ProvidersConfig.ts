@@ -23,7 +23,7 @@ interface ProviderEndpoints { //fix tbis//
   rpc: string;
   etherscan: string;
   alchemy?: string;
-  fallbackRpc: string;
+  fallbackRpc?: string;
 }
 
 interface ChainProviders {
@@ -37,22 +37,22 @@ class ProvidersConfig {
   private static instance: ProvidersConfig;
   
   // Environment variables (with fallbacks)
-  private infuraApiKey: string;
-  private alchemyApiKey: string;
-  private etherscanApiKey: string;
-  private polygonscanApiKey: string;
-  private polygonRpcUrl: string;
+  private infuraApiKey?: string;
+  private alchemyApiKey?: string;
+  private etherscanApiKey?: string;
+  private polygonscanApiKey?: string;
+  private polygonRpcUrl?: string;
 
   // ProvidersConfig is a thin facade that delegates to `rpcConfig` and `explorerConfig`.
   // It preserves the public API for backwards compatibility.
 
   private constructor() {
     // Load from environment variables (for status reporting)
-    this.infuraApiKey = process.env.INFURA_API_KEY || '84842078b09946638c03157f83405213';
-    this.alchemyApiKey = process.env.ALCHEMY_API_KEY || 'demo';
-    this.etherscanApiKey = process.env.ETHERSCAN_API_KEY || 'demo';
-    this.polygonscanApiKey = process.env.POLYGONSCAN_API_KEY || process.env.POLYGON_API_KEY || 'demo';
-    this.polygonRpcUrl = process.env.POLYGON_RPC_URL || 'https://polygon-rpc.com';
+    this.infuraApiKey = process.env.INFURA_API_KEY;
+    this.alchemyApiKey = process.env.ALCHEMY_API_KEY;
+    this.etherscanApiKey = process.env.ETHERSCAN_API_KEY;
+    this.polygonscanApiKey = process.env.POLYGONSCAN_API_KEY || process.env.POLYGON_API_KEY;
+    this.polygonRpcUrl = process.env.POLYGON_RPC_URL;
 
     // NOTE: ProvidersConfig delegates runtime resolution to RpcConfig and ExplorerConfig.
     this.logInitialization();
@@ -84,14 +84,12 @@ class ProvidersConfig {
         return endpoints[0].endpoint;
       }
 
-      // Last-resort fallbacks
-      if (chainId === 1) {
-        return `https://mainnet.infura.io/v3/${this.infuraApiKey}`;
-      } else if (chainId === 137) {
-        return this.polygonRpcUrl;
+      // Chain-specific fallback (only if explicitly configured)
+      if (chainId === 137 && this.polygonRpcUrl) {
+        return this.polygonRpcUrl!;
       }
 
-      throw new Error(`No RPC provider configured for chain ${chainId}`);
+      throw new Error(`No RPC provider configured for chain ${chainId}. Please set INFURA_API_KEY or ALCHEMY_API_KEY or POLYGON_RPC_URL.`);
     }
   }
 
@@ -109,15 +107,15 @@ class ProvidersConfig {
       return endpoints[0].endpoint;
     }
 
-    // Chain-specific fallback
-    if (chainId === 137) {
-      return this.polygonRpcUrl;
+    // Chain-specific fallback (if explicitly configured)
+    if (chainId === 137 && this.polygonRpcUrl) {
+      return this.polygonRpcUrl!;
     }
-    if (chainId === 1) {
-      return `https://eth-mainnet.alchemyapi.io/v2/${this.alchemyApiKey}`;
+    if (chainId === 1 && this.alchemyApiKey) {
+      return `https://eth-mainnet.g.alchemy.com/v2/${this.alchemyApiKey}`;
     }
 
-    throw new Error(`No fallback RPC provider configured for chain ${chainId}`);
+    throw new Error(`No fallback RPC provider configured for chain ${chainId}. Please configure additional providers or set POLYGON_RPC_URL.`);
   }
 
   /**
@@ -144,13 +142,13 @@ class ProvidersConfig {
     try {
       return explorerConfig.getExplorerApiUrl(chainId);
     } catch (e) {
-      // Fallback to legacy constructed endpoints
-      if (chainId === 1) {
+      // Fallback to legacy constructed endpoints only if API key is present
+      if (chainId === 1 && this.etherscanApiKey) {
         return `https://api.etherscan.io/api?apikey=${this.etherscanApiKey}`;
-      } else if (chainId === 137) {
+      } else if (chainId === 137 && this.polygonscanApiKey) {
         return `https://api.polygonscan.com/api?apikey=${this.polygonscanApiKey}`;
       }
-      throw new Error(`No Etherscan API configured for chain ${chainId}`);
+      throw new Error(`No block explorer API configured for chain ${chainId}. Please set ETHERSCAN_API_KEY or POLYGONSCAN_API_KEY.`);
     }
   }
 
@@ -195,20 +193,24 @@ class ProvidersConfig {
   private logInitialization(): void {
     const warnings: string[] = [];
 
-    if (this.infuraApiKey === '84842078b09946638c03157f83405213') {
-      warnings.push('INFURA_API_KEY is using public fallback (may have rate limits)');
+    if (!this.infuraApiKey) {
+      warnings.push('INFURA_API_KEY not set');
     }
 
-    if (this.alchemyApiKey === 'demo') {
-      warnings.push('ALCHEMY_API_KEY is using demo key (may have rate limits)');
+    if (!this.alchemyApiKey) {
+      warnings.push('ALCHEMY_API_KEY not set');
     }
 
-    if (this.etherscanApiKey === 'demo') {
-      warnings.push('ETHERSCAN_API_KEY is using demo key (may have rate limits)');
+    if (!this.etherscanApiKey) {
+      warnings.push('ETHERSCAN_API_KEY not set');
     }
 
-    if (this.polygonscanApiKey === 'demo') {
-      warnings.push('POLYGON_API_KEY is using demo key (may have rate limits)');
+    if (!this.polygonscanApiKey) {
+      warnings.push('POLYGONSCAN_API_KEY not set');
+    }
+
+    if (!this.polygonRpcUrl) {
+      warnings.push('POLYGON_RPC_URL not set');
     }
 
     const rpcStatus = rpcConfig.getStatus();
@@ -239,9 +241,9 @@ class ProvidersConfig {
 
     return {
       chains: this.getSupportedChains(),
-      infuraConfigured: this.infuraApiKey !== '84842078b09946638c03157f83405213',
-      alchemyConfigured: this.alchemyApiKey !== 'demo',
-      etherscanConfigured: this.etherscanApiKey !== 'demo',
+      infuraConfigured: !!this.infuraApiKey,
+      alchemyConfigured: !!this.alchemyApiKey,
+      etherscanConfigured: !!this.etherscanApiKey,
       rpcProviders: rpcStatus.providers,
       explorers: explorers.explorers,
     };

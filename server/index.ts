@@ -9,6 +9,7 @@ import http from 'http';
 import { priceViewerService } from './application/services/PriceViewerService.ts';
 import { sharedStateCache } from './application/services/SharedStateCache.ts';
 import { SwapController } from './application/services/SwapController.ts';
+import { providersConfig } from './infrastructure/config/ProvidersConfig';
 
 const app = express();
 const server = http.createServer(app);
@@ -17,38 +18,32 @@ const server = http.createServer(app);
 app.use(express.json());
 app.use(express.static('dist/public'));
 
-// Provide public RPC fallbacks for resilience
-const { ALCHEMY_API_KEY, INFURA_API_KEY, POLYGON_RPC_URL } = process.env;
+// Build RPC provider map from ProvidersConfig; in development we allow a public RPC fallback
+const rpcProviders: { [chainId: number]: string } = {};
 
-if (!INFURA_API_KEY) {
-  console.warn(
-    'INFURA_API_KEY not found, using public RPC. This may result in rate-limiting.'
-  );
-}
-if (!ALCHEMY_API_KEY) {
-  console.warn(
-    'ALCHEMY_API_KEY not found, using public RPC. This may result in rate-limiting.'
-  );
-}
-if (!POLYGON_RPC_URL) {
-  console.warn(
-    'POLYGON_RPC_URL not found, using public RPC. This may result in rate-limiting.'
-  );
+try {
+  rpcProviders[1] = providersConfig.getRpcProvider(1);
+} catch (err) {
+  if (process.env.NODE_ENV !== 'production') {
+    console.warn('No configured RPC for Ethereum. Falling back to a public RPC endpoint for development. Set INFURA_API_KEY or ALCHEMY_API_KEY to avoid this in production.');
+    rpcProviders[1] = process.env.ETHEREUM_PUBLIC_RPC || 'https://cloudflare-eth.com';
+  } else {
+    console.error('No configured RPC for Ethereum. Please set INFURA_API_KEY or ALCHEMY_API_KEY. Exiting.');
+    process.exit(1);
+  }
 }
 
-const ethProviders = [
-  `https://mainnet.infura.io/v3/${INFURA_API_KEY || '84842078b09946638c03157f83405213'}`,
-  `https://eth-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY || 'demo'}`,
-];
-
-const polygonProviders = [
-  POLYGON_RPC_URL || 'https://polygon-rpc.com',
-];
-
-const rpcProviders: { [chainId: number]: string } = {
-  1: ethProviders[0],
-  137: polygonProviders[0],
-};
+try {
+  rpcProviders[137] = providersConfig.getRpcProvider(137);
+} catch (err) {
+  if (process.env.NODE_ENV !== 'production') {
+    console.warn('No configured RPC for Polygon. Falling back to a public RPC endpoint for development. Set POLYGON_RPC_URL to avoid this in production.');
+    rpcProviders[137] = process.env.POLYGON_PUBLIC_RPC || 'https://polygon-rpc.com';
+  } else {
+    console.error('No configured RPC for Polygon. Please set POLYGON_RPC_URL. Exiting.');
+    process.exit(1);
+  }
+}
 
 const ethersAdapter = new EthersAdapter(rpcProviders);
 const storageService = new StorageService();

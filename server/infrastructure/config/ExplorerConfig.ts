@@ -50,14 +50,14 @@ class ExplorerConfig {
    * ADD NEW EXPLORERS HERE
    */
   private initializeExplorers(): void {
-    const etherscanKey = process.env.ETHERSCAN_API_KEY || 'demo';
-    const polygonscanKey = process.env.POLYGONSCAN_API_KEY || process.env.ETHERSCAN_API_KEY || 'demo';
+    const etherscanKey = process.env.ETHERSCAN_API_KEY;
+    const polygonscanKey = process.env.POLYGONSCAN_API_KEY || process.env.ETHERSCAN_API_KEY;
 
     // Ethereum Mainnet - Etherscan
     this.explorers.set(1, {
       name: 'Etherscan',
       baseUrl: 'https://api.etherscan.io/api',
-      apiKey: etherscanKey,
+      apiKey: etherscanKey || '',
       endpoints: {
         tokenInfo: 'https://etherscan.io/token/',
         tokenHolders: 'https://etherscan.io/token/',
@@ -69,13 +69,21 @@ class ExplorerConfig {
     this.explorers.set(137, {
       name: 'PolygonScan',
       baseUrl: 'https://api.polygonscan.com/api',
-      apiKey: polygonscanKey,
+      apiKey: polygonscanKey || '',
       endpoints: {
         tokenInfo: 'https://polygonscan.com/token/',
         tokenHolders: 'https://polygonscan.com/token/',
         transactionHistory: 'https://polygonscan.com/tx/',
       },
     });
+
+    // Warn if explorer API keys are missing (informational)
+    if (!etherscanKey) {
+      console.warn('ETHERSCAN_API_KEY not set. Some explorer API features may be limited.');
+    }
+    if (!polygonscanKey) {
+      console.warn('POLYGONSCAN_API_KEY not set. Some explorer API features may be limited.');
+    }
 
     // ADD MORE EXPLORERS HERE
     // this.explorers.set(42161, { // Arbitrum
@@ -117,7 +125,10 @@ class ExplorerConfig {
    */
   public getExplorerApiUrl(chainId: number): string {
     const explorer = this.getExplorer(chainId);
-    return `${explorer.baseUrl}?apikey=${explorer.apiKey}`;
+    // If an API key is configured, include it. Otherwise return the base URL (some APIs allow anonymous access).
+    return explorer.apiKey && explorer.apiKey.length > 0
+      ? `${explorer.baseUrl}?apikey=${explorer.apiKey}`
+      : explorer.baseUrl;
   }
 
   /**
