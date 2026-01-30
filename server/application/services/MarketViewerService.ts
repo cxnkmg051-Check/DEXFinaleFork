@@ -2,17 +2,16 @@
  * MarketViewerService - Market Data Display Service
  * 
  * RESPONSIBILITY: Fetch and aggregate market data for tokens
- * - Token prices in USD
- * - Liquidity, volume, and market metrics
+ * - Token prices in USD via SpotPricingEngine (uses pool data)
+ * - Token metadata from StorageService
+ * - Liquidity, holders from Explorer APIs (optional)
  * - Track data sources explicitly
  * - Support network-specific data
  * 
- * DATA SOURCES:
- * 1. Explorer APIs (Etherscan, PolygonScan) - token info
- * 2. RPC Calls (via ProvidersConfig) - on-chain data
- * 3. Cache - previously fetched data
- * 4. Alchemy APIs - enhanced data
- * 5. Multicall - batch queries
+ * PRICING FLOW:
+ * 1. SpotPricingEngine computes prices from pool data (cached in SharedStateCache)
+ * 2. Pool data is maintained fresh by PoolScheduler
+ * 3. Explorer APIs provide supplemental metadata (holders, contract creation date)
  * 
  * EXPLICIT DATA TRACKING:
  * Every response includes "dataSource" field showing where data came from
@@ -20,14 +19,11 @@
 
 import { StorageService } from './StorageService';
 import { spotPricingEngine } from './SpotPricingEngine';
-import { rpcConfig } from '../../infrastructure/config/RpcConfig';
-import { explorerConfig } from '../../infrastructure/config/ExplorerConfig';
-import { networkConfig } from '../../infrastructure/config/NetworkConfig';
+import { sharedStateCache } from './SharedStateCache';
 import {
   TokenMarketData,
   MarketOverview,
   DataSource,
-  MarketDataWithError,
   TokenSearchResult,
   FetchMarketDataOptions,
 } from '../../domain/market-viewer.types';
@@ -44,11 +40,8 @@ class MarketViewerService {
   /**
    * Get market data for a single token
    * 
-   * DATA SOURCES USED:
-   * 1. Cache (fastest)
-   * 2. Explorer API (Etherscan/PolygonScan)
-   * 3. RPC calls
-   * 4. Mock data (fallback)
+   * PRICING: Uses SpotPricingEngine to compute price from pool data
+   * METADATA: Fetched from storage service
    * 
    * @param tokenAddress Token contract address
    * @param chainId Network chain ID
@@ -71,25 +64,36 @@ class MarketViewerService {
       }
     }
 
-    // Fetch from explorer API to get token metadata
-    let marketData = await this.fetchFromExplorerApi(tokenAddress, chainId);
-    
-    if (marketData) {
-      // Try to get pricing from spot pricing engine
-      const price = spotPricingEngine.computeSpotPrice(tokenAddress, chainId);
-      if (price !== null && price > 0) {
-        marketData.price = price;
-        marketData.dataSource = 'multicall'; // Price came from pool data via multicall
-      }
-      
-      this.setCacheEntry(cacheKey, marketData);
-      return marketData;
+    // Get token metadata from storage
+    const tokens = await this.storageService.getTokensByNetwork(chainId);
+    const token = tokens.find(t => t.address.toLowerCase() === tokenAddress.toLowerCase());
+
+    if (!token) {
+      throw new Error(`Token ${tokenAddress} not found on chain ${chainId}`);
     }
 
-    // Fallback: return data with zero pricing
-    const fallbackData = this.getMockTokenData(tokenAddress, chainId);
-    this.setCacheEntry(cacheKey, fallbackData);
-    return fallbackData;
+    // Compute price using SpotPricingEngine (uses pool data from SharedStateCache)
+    const price = spotPricingEngine.computeSpotPrice(tokenAddress, chainId);
+
+    // Build market data response
+    const marketData: TokenMarketData = {
+      address: tokenAddress,
+      symbol: token.symbol,
+      name: token.name,
+      decimals: token.decimals,
+      chainId,
+      price: price || 0,
+      priceChange24h: 0, // Not tracked currently
+      liquidity: 0, // Not tracked currently
+      volume24h: 0, // Not tracked currently
+      holders: 0, // Would come from explorer API if implemented
+      dataSource: (price && price > 0) ? 'multicall' : 'insufficient-data' as DataSource,
+      timestamp: Date.now(),
+      cachedUntil: Date.now() + this.DEFAULT_CACHE_TTL,
+    };
+
+    this.setCacheEntry(cacheKey, marketData);
+    return marketData;
   }
 
   /**
@@ -193,80 +197,6 @@ class MarketViewerService {
     }));
 
     return tokensWithPools;
-  }
-
-  /**
-   * INTERNAL: Fetch data from Explorer API
-   * DATA SOURCE: Explorer API (Etherscan, PolygonScan)
-   */
-  private async fetchFromExplorerApi(
-    tokenAddress: string,
-    chainId: number
-  ): Promise<TokenMarketData | null> {
-    try {
-      const explorer = explorerConfig.getExplorer(chainId);
-      const apiUrl = explorerConfig.getExplorerApiUrl(chainId);
-      
-      if (!apiUrl || apiUrl.includes('?apikey=')) {
-        // Check if we actually have an API key
-        const url = new URL(apiUrl);
-        const apiKey = url.searchParams.get('apikey');
-        if (!apiKey || apiKey === '') {
-          console.log(`⚠️ No ${explorer.name} API key configured, using fallback`);
-          return null;
-        }
-      }
-
-      console.log(`🌐 Fetching from ${explorer.name} for ${tokenAddress}`);
-
-      // Build the Etherscan/PolygonScan API request for token info
-      const params = new URLSearchParams({
-        module: 'token',
-        action: 'tokeninfo',
-        contractaddress: tokenAddress,
-      });
-
-      // Add API key if available
-      const urlWithKey = `${apiUrl}&${params.toString()}`;
-      const response = await fetch(urlWithKey);
-
-      if (!response.ok) {
-        console.warn(`⚠️ ${explorer.name} API returned ${response.status}`);
-        return null;
-      }
-
-      const data = await response.json();
-
-      // Check if the API returned an error
-      if (data.status !== '1' || data.result?.length === 0) {
-        console.warn(`⚠️ ${explorer.name} no data for token ${tokenAddress}`);
-        return null;
-      }
-
-      const tokenInfo = data.result[0];
-
-      // Parse the response and construct TokenMarketData
-      const marketData: TokenMarketData = {
-        address: tokenAddress,
-        symbol: tokenInfo.symbol || 'UNKNOWN',
-        name: tokenInfo.name || 'Unknown Token',
-        decimals: parseInt(tokenInfo.decimals || '18'),
-        chainId,
-        price: 0, // Explorer API doesn't provide price; would need pricing oracle
-        priceChange24h: 0, // Not available from explorer
-        liquidity: 0, // Not available from explorer
-        volume24h: 0, // Not available from explorer
-        holders: parseInt(tokenInfo.holders || '0'),
-        dataSource: 'explorer-api' as DataSource,
-        timestamp: Date.now(),
-        cachedUntil: Date.now() + this.DEFAULT_CACHE_TTL,
-      };
-
-      return marketData;
-    } catch (error) {
-      console.error(`❌ Explorer API error:`, error);
-      return null;
-    }
   }
 
   /**
