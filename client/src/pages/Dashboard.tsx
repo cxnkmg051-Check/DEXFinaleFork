@@ -44,16 +44,7 @@ export default function Dashboard() {
     setCurrentPage(1);
   };
 
-  const mockMarketTokens = tokensData?.tokens?.map(token => ({
-    address: token.address,
-    symbol: token.symbol,
-    name: token.symbol, // In a real app, fetch from metadata
-    price: Math.random() * 5000,
-    marketCap: Math.random() * 1e12,
-    liquidity: Math.random() * 1e9,
-    volume24h: Math.random() * 1e9,
-    change24h: (Math.random() - 0.5) * 20,
-  })) || [];
+  const tokens = tokensData?.tokens || [];
 
   const handleAddToken = async (address: string) => {
     setIsAddingToken(true);

@@ -135,9 +135,9 @@ class MarketViewerService {
     const hasValidPrice = price !== null && price > 0;
     const marketData: TokenMarketData = {
       address: tokenAddress,
-      symbol: token.symbol,
-      name: token.name,
-      decimals: token.decimals,
+      symbol: token.symbol || 'N/A',
+      name: token.name || `Token ${tokenAddress.slice(2, 8)}`,
+      decimals: token.decimals || 18,
       chainId,
       price: price || 0,
       priceChange24h: 0, // Not tracked currently
@@ -202,9 +202,9 @@ class MarketViewerService {
         // Return token with insufficient data on error
         return {
           address: token.address,
-          symbol: token.symbol,
-          name: token.name,
-          decimals: token.decimals,
+          symbol: token.symbol || 'N/A',
+          name: token.name || `Token ${token.address.slice(2, 8)}`,
+          decimals: token.decimals || 18,
           chainId,
           price: 0,
           priceChange24h: 0,
