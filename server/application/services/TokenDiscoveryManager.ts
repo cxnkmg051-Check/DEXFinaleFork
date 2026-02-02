@@ -13,7 +13,7 @@
 import { StorageService } from './StorageService';
 import { Token } from '../../domain/entities';
 import { PoolRegistry, PoolMetadata, PricingRoute } from '../../domain/types';
-import { subgraphConfig, BASE_TOKENS } from '../../infrastructure/config/SubgraphConfig';
+import { getSubgraphConfig, BASE_TOKENS, SubgraphConfig } from '../../infrastructure/config/SubgraphConfig';
 import { timingConfig } from '../../infrastructure/config/TimingConfig';
 
 interface DiscoveryAttempt {
@@ -87,7 +87,8 @@ export class TokenDiscoveryManager {
       let poolsFoundForToken = 0;
 
       try {
-        // Query all subgraphs for this chain
+        // Get latest subgraph config
+        const subgraphConfig = getSubgraphConfig();
         const subgraphs = subgraphConfig[chainId] || [];
         const allPools: SubgraphPool[] = [];
 
@@ -186,7 +187,7 @@ export class TokenDiscoveryManager {
    */
   private async querySubgraphForToken(
     tokenAddress: string,
-    subgraph: typeof subgraphConfig[1][0],
+    subgraph: SubgraphConfig,
     chainId: number
   ): Promise<SubgraphPool[]> {
     const baseTokens = BASE_TOKENS[chainId] || [];

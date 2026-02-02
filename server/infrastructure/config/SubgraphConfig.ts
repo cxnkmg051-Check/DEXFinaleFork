@@ -12,46 +12,54 @@ export interface SubgraphConfig {
   chainId: number;
 }
 
-const GRAPH_API_KEY = process.env.THE_GRAPH_API_KEY || "";
+// Export a function that returns the config, so it reads env vars at call time
+export function getSubgraphConfig(): Record<number, SubgraphConfig[]> {
+  const GRAPH_API_KEY = process.env.THE_GRAPH_API_KEY || "";
 
-export const subgraphConfig: Record<number, SubgraphConfig[]> = {
-  // Ethereum
-  1: [
-    {
-      name: "Uniswap V3",
-      endpoint: `https://gateway.thegraph.com/api/${GRAPH_API_KEY}/subgraphs/id/ELUcwQQj5M5NilErg5h2JU16EWEbxqea3zNYelujbpe`,
-      dexType: "v3",
-      chainId: 1,
-    },
-    {
-      name: "Uniswap V2",
-      endpoint: `https://gateway.thegraph.com/api/${GRAPH_API_KEY}/subgraphs/id/EJw8N1DPbqByePEA8ND82u51Q7iL3QAierBCQiS3SNyd`,
-      dexType: "v2",
-      chainId: 1,
-    },
-    {
-      name: "SushiSwap",
-      endpoint: `https://gateway.thegraph.com/api/${GRAPH_API_KEY}/subgraphs/id/BxaqKvroXXwVezya7kvzKvqKK6jxc73BfzZeJMTPVj9`,
-      dexType: "v2",
-      chainId: 1,
-    },
-  ],
-  // Polygon
-  137: [
-    {
-      name: "Uniswap V3 (Polygon)",
-      endpoint: `https://gateway.thegraph.com/api/${GRAPH_API_KEY}/subgraphs/id/A8N3t6jPTtbAMZwgBuQdBKKfEp1ZitcFJ3G6u4oBXVs`,
-      dexType: "v3",
-      chainId: 137,
-    },
-    {
-      name: "QuickSwap",
-      endpoint: `https://gateway.thegraph.com/api/${GRAPH_API_KEY}/subgraphs/id/z3LEz7tD7AKmddyZa5qpqYFYS6rMo2fy5g47DzPuSXn`,
-      dexType: "v2",
-      chainId: 137,
-    },
-  ],
-};
+  if (!GRAPH_API_KEY) {
+    console.warn("THE_GRAPH_API_KEY not set. Subgraph queries will be made without an API key.");
+  }
+  
+  return {
+    // Ethereum
+    1: [
+      {
+        name: "Uniswap V3",
+        endpoint: `https://gateway.thegraph.com/api/${GRAPH_API_KEY}/subgraphs/id/ELUcwQQj5M5NilErg5h2JU16EWEbxqea3zNYelujbpe`,
+        dexType: "v3",
+        chainId: 1,
+      },
+      {
+        name: "Uniswap V2",
+        endpoint: `https://gateway.thegraph.com/api/${GRAPH_API_KEY}/subgraphs/id/EJw8N1DPbqByePEA8ND82u51Q7iL3QAierBCQiS3SNyd`,
+        dexType: "v2",
+        chainId: 1,
+      },
+      {
+        name: "SushiSwap",
+        endpoint: `https://gateway.thegraph.com/api/${GRAPH_API_KEY}/subgraphs/id/BxaqKvroXXwVezya7kvzKvqKK6jxc73BfzZeJMTPVj9`,
+        dexType: "v2",
+        chainId: 1,
+      },
+    ],
+    // Polygon
+    137: [
+      {
+        name: "Uniswap V3 (Polygon)",
+        endpoint: `https://gateway.thegraph.com/api/${GRAPH_API_KEY}/subgraphs/id/A8N3t6jPTtbAMZwgBuQdBKKfEp1ZitcFJ3G6u4oBXVs`,
+        dexType: "v3",
+        chainId: 137,
+      },
+      {
+        name: "QuickSwap",
+        endpoint: `https://gateway.thegraph.com/api/${GRAPH_API_KEY}/subgraphs/id/z3LEz7tD7AKmddyZa5qpqYFYS6rMo2fy5g47DzPuSXn`,
+        dexType: "v2",
+        chainId: 137,
+      },
+    ],
+  };
+}
+
 
 export const BASE_TOKENS: Record<number, string[]> = {
   1: [

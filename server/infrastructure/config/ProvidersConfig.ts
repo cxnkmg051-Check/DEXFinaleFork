@@ -105,9 +105,8 @@ class ProvidersConfig {
    * @returns Primary RPC endpoint
    */
   public getRpcProvider(chainId: number): string {
-    // Prefer named provider (Infura) for backward compatibility
     try {
-      return this.getRpcConfig().getRpcEndpointFromProvider('Infura', chainId);
+      return this.getRpcConfig().getNextRpcEndpoint(chainId);
     } catch (e) {
       // Fallback to first available endpoint
       const endpoints = this.getRpcConfig().getEndpointsForChain(chainId);
