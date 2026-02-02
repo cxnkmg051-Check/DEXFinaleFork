@@ -52,16 +52,19 @@ export class StorageService {
   async getTokensByNetwork(chainId: number): Promise<Token[]> {
     const fileName = `tokens_${chainId === 1 ? 'ethereum' : 'polygon'}.json`;
     try {
-      const tokens = await this.read(fileName) as Token[];
+      const tokens = await this.read(fileName) as any[];
       if (!Array.isArray(tokens)) return [];
       
-      // Normalize addresses to valid checksums and ensure chainId is present
+      // ** FIX: Adapt the nested structure from JSON to the flat Token entity **
       return tokens
-        .filter(token => token && token.address)
+        .filter(token => token && token.address && token.metadata)
         .map(token => ({
-          ...token,
+          address: normalizeAddress(token.address),
+          name: token.metadata.name,
+          symbol: token.metadata.symbol,
+          decimals: token.metadata.decimals,
           chainId: chainId, // Ensure chainId is correctly set
-          address: normalizeAddress(token.address)
+          logoURI: '' // Initialize with an empty logoURI
         }));
     } catch (e) {
       console.error(`Error reading tokens for chain ${chainId}:`, e);

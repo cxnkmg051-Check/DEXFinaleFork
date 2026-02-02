@@ -24,20 +24,26 @@ export function getSubgraphConfig(): Record<number, SubgraphConfig[]> {
     // Ethereum
     1: [
       {
+        name: "Uniswap V4",
+        endpoint: `https://gateway.thegraph.com/api/${GRAPH_API_KEY}/subgraphs/id/DiYPVdygkfjDWhbxGSqAQxwBKmfKnkWQojqeM2rkLb3G`,
+        dexType: "v3", // NOTE: Assuming v4 is v3-compatible for queries
+        chainId: 1,
+      },
+      {
         name: "Uniswap V3",
-        endpoint: `https://gateway.thegraph.com/api/${GRAPH_API_KEY}/subgraphs/id/ELUcwQQj5M5NilErg5h2JU16EWEbxqea3zNYelujbpe`,
+        endpoint: `https://gateway.thegraph.com/api/${GRAPH_API_KEY}/subgraphs/id/5zvR82QoaXYFyDEKLZ9t6v9adgnptxYpKpSbxtgVENFV`,
         dexType: "v3",
         chainId: 1,
       },
       {
         name: "Uniswap V2",
-        endpoint: `https://gateway.thegraph.com/api/${GRAPH_API_KEY}/subgraphs/id/EJw8N1DPbqByePEA8ND82u51Q7iL3QAierBCQiS3SNyd`,
+        endpoint: `https://gateway.thegraph.com/api/${GRAPH_API_KEY}/subgraphs/id/A3Np3RQbaBA6oKJgiwDJeo5T3zrYfGHPWFYayMwtNDum`,
         dexType: "v2",
         chainId: 1,
       },
       {
         name: "SushiSwap",
-        endpoint: `https://gateway.thegraph.com/api/${GRAPH_API_KEY}/subgraphs/id/BxaqKvroXXwVezya7kvzKvqKK6jxc73BfzZeJMTPVj9`,
+        endpoint: `https://gateway.thegraph.com/api/${GRAPH_API_KEY}/subgraphs/id/D7azkFFPFT5H8i32VCHGg64pRTg5g2Q3eeiURAe62c26`,
         dexType: "v2",
         chainId: 1,
       },
@@ -46,13 +52,19 @@ export function getSubgraphConfig(): Record<number, SubgraphConfig[]> {
     137: [
       {
         name: "Uniswap V3 (Polygon)",
-        endpoint: `https://gateway.thegraph.com/api/${GRAPH_API_KEY}/subgraphs/id/A8N3t6jPTtbAMZwgBuQdBKKfEp1ZitcFJ3G6u4oBXVs`,
+        endpoint: `https://gateway.thegraph.com/api/${GRAPH_API_KEY}/subgraphs/id/3hCPRGf4z88VC5rsBKU5AA9FBBq5nF3jbKJG7VZCbhjm`,
         dexType: "v3",
         chainId: 137,
       },
       {
+        name: "SushiSwap (Polygon)",
+        endpoint: `https://gateway.thegraph.com/api/${GRAPH_API_KEY}/subgraphs/id/C4jPXEA5i58jM5E16pT6aSA1Abh2Fk2BSo3h3JKmS3w2`,
+        dexType: "v2",
+        chainId: 137,
+      },
+      {
         name: "QuickSwap",
-        endpoint: `https://gateway.thegraph.com/api/${GRAPH_API_KEY}/subgraphs/id/z3LEz7tD7AKmddyZa5qpqYFYS6rMo2fy5g47DzPuSXn`,
+        endpoint: `https://gateway.thegraph.com/api/${GRAPH_API_KEY}/subgraphs/id/GVQo5o5aE62iNucp2gDt2t4F8vowm2x3KqFBcKF8jK3R`,
         dexType: "v2",
         chainId: 137,
       },

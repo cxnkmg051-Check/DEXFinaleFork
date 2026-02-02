@@ -34,9 +34,8 @@ export class DiscoveryService {
     // PHASE 1: Prime Token Metadata (with batching to avoid rate limiting)
     console.log(`\n📋 Priming metadata for ${tokens.length} tokens...`);
     
-    // FIX #4: Batch fetch metadata in groups of 10 to parallelize while respecting rate limits
-    const BATCH_SIZE = 10;
-    const BATCH_DELAY_MS = 100; // Delay between batches, not per-token
+    const BATCH_SIZE = 5;
+    const BATCH_DELAY_MS = 1000; // Delay between batches, not per-token
     
     for (let i = 0; i < tokens.length; i += BATCH_SIZE) {
       const batch = tokens.slice(i, i + BATCH_SIZE).filter(t => t && t.address && t.chainId);
@@ -65,14 +64,12 @@ export class DiscoveryService {
               }
             }
           } catch (e) {
-            console.warn(`  ⚠️  Explorer metadata fetch failed for ${tokenSymbol}, falling back to RPC`);
-          }
-
-          if (!metadata) {
-            metadata = await this.ethersAdapter.getTokenMetadata(token.address, token.chainId);
+            console.warn(`  ⚠️  Explorer metadata fetch failed for ${tokenSymbol}. It will be skipped.`);
           }
           
-          sharedStateCache.setTokenMetadata(token.address, metadata);
+          if(metadata) {
+            sharedStateCache.setTokenMetadata(token.address, metadata);
+          }
         } catch (error: any) {
           console.error(`  ✗ Error fetching metadata for ${token.symbol || 'N/A'}:`, error.message);
         }
