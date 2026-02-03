@@ -133,7 +133,8 @@ class SpotPricingEngine {
     let bestBaseSymbol: string | null = null;
     let bestBaseAddress: string | null = null;
 
-    // First, try to find a stablecoin base with an available pool
+    console.log(`🔍 [PRICING] ${tokenShort}... checking strategy 1 (stablecoin base)`);
+    // First, try to find a stablecoin base with a cached pool
     for (const baseSymbol in tokenRoutes) {
       const baseAddress = symbolMap.get(baseSymbol);
       if (!baseAddress) continue;
@@ -142,13 +143,16 @@ class SpotPricingEngine {
       // This base is a USD stablecoin, try to fetch pool state
       const poolAddresses = tokenRoutes[baseSymbol];
       for (const poolAddr of poolAddresses) {
-        const poolState = await this.getPoolState(poolAddr, chainId);
-        if (poolState) {
-          bestPoolAddress = poolAddr;
+        // ALWAYS use lowercase for cache keys
+        const pState = sharedStateCache.getPoolState(poolAddr.toLowerCase());
+        if (pState) {
+          bestPoolAddress = poolAddr.toLowerCase();
           bestBaseSymbol = baseSymbol;
           bestBaseAddress = baseAddress;
           console.log(`✓ [PRICING] ${tokenShort}... found CACHED ${baseSymbol} route (pool: ${poolAddr.slice(0, 6)}...)`);
           break;
+        } else {
+          console.log(`ℹ️ [PRICING] ${tokenShort}... pool ${poolAddr.slice(0, 6)} not in cache yet`);
         }
       }
       if (bestPoolAddress) break;
@@ -156,17 +160,20 @@ class SpotPricingEngine {
 
     // Strategy 2: If no stablecoin route available, try WETH
     if (!bestPoolAddress) {
+      console.log(`🔍 [PRICING] ${tokenShort}... checking strategy 2 (WETH base)`);
       const wethSymbol = 'WETH';
       if (tokenRoutes[wethSymbol]) {
         const poolAddresses = tokenRoutes[wethSymbol];
         for (const poolAddr of poolAddresses) {
-          const poolState = await this.getPoolState(poolAddr, chainId);
-          if (poolState) {
-            bestPoolAddress = poolAddr;
+          const pState = sharedStateCache.getPoolState(poolAddr.toLowerCase());
+          if (pState) {
+            bestPoolAddress = poolAddr.toLowerCase();
             bestBaseSymbol = wethSymbol;
             bestBaseAddress = symbolMap.get(wethSymbol) || null;
             console.log(`⚠️ [PRICING] ${tokenShort}... using WETH route (pool: ${poolAddr.slice(0, 6)}..., will recurse)`);
             break;
+          } else {
+            console.log(`ℹ️ [PRICING] ${tokenShort}... WETH pool ${poolAddr.slice(0, 6)} not in cache yet`);
           }
         }
       }
@@ -174,15 +181,16 @@ class SpotPricingEngine {
 
     // Strategy 3: Try any route with an available pool
     if (!bestPoolAddress) {
+      console.log(`🔍 [PRICING] ${tokenShort}... checking strategy 3 (any base)`);
       for (const baseSymbol in tokenRoutes) {
         const baseAddress = symbolMap.get(baseSymbol);
         if (!baseAddress) continue;
 
         const poolAddresses = tokenRoutes[baseSymbol];
         for (const poolAddr of poolAddresses) {
-          const poolState = await this.getPoolState(poolAddr, chainId);
-          if (poolState) {
-            bestPoolAddress = poolAddr;
+          const pState = sharedStateCache.getPoolState(poolAddr.toLowerCase());
+          if (pState) {
+            bestPoolAddress = poolAddr.toLowerCase();
             bestBaseSymbol = baseSymbol;
             bestBaseAddress = baseAddress;
             console.log(`⚠️ [PRICING] ${tokenShort}... using ${baseSymbol} route (will recurse)`);
