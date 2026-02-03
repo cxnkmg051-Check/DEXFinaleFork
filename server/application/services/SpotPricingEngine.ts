@@ -125,6 +125,8 @@ class SpotPricingEngine {
           bestBaseAddress = baseAddress;
           console.log(`✓ [PRICING] ${tokenShort}... found CACHED ${baseSymbol} route (pool: ${poolAddr.slice(0, 6)}...)`);
           break;
+        } else {
+          console.log(`ℹ️ [PRICING] ${tokenShort}... pool ${poolAddr.slice(0, 6)} not in cache yet`);
         }
       }
       if (bestPoolAddress) break;
@@ -144,6 +146,8 @@ class SpotPricingEngine {
             bestBaseAddress = symbolMap.get(wethSymbol) || null;
             console.log(`⚠️ [PRICING] ${tokenShort}... using WETH route (pool: ${poolAddr.slice(0, 6)}..., will recurse)`);
             break;
+          } else {
+            console.log(`ℹ️ [PRICING] ${tokenShort}... WETH pool ${poolAddr.slice(0, 6)} not in cache yet`);
           }
         }
       }
