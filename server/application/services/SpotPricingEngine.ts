@@ -1,6 +1,7 @@
 
 import { sharedStateCache } from './SharedStateCache';
 import { storageService } from './StorageService';
+import { EthersAdapter } from '../../infrastructure/adapters/EthersAdapter';
 
 // Known USD stablecoins for price anchoring
 const USD_STABLECOINS: Record<number, Set<string>> = {
@@ -33,6 +34,8 @@ const TOKEN_DECIMALS: Record<string, number> = {
 };
 
 class SpotPricingEngine {
+  constructor(private ethersAdapter: EthersAdapter) {}
+
   /**
    * Build a symbol-to-address map for a given chain
    */
@@ -43,6 +46,28 @@ class SpotPricingEngine {
       map.set(token.symbol?.toUpperCase() || '', token.address.toLowerCase());
     }
     return map;
+  }
+
+  /**
+   * Get pool state - from cache if available, otherwise fetch directly from contract
+   */
+  private async getPoolState(poolAddress: string, chainId: number) {
+    // Try cache first
+    const cached = sharedStateCache.getPoolState(poolAddress);
+    if (cached) {
+      return cached;
+    }
+    
+    // Fall back to direct RPC query
+    try {
+      const poolState = await this.ethersAdapter.getPoolState(poolAddress, chainId);
+      // Store in cache for future use
+      sharedStateCache.setPoolState(poolAddress, poolState);
+      return poolState;
+    } catch (error) {
+      console.error(`Error fetching pool state for ${poolAddress}:`, error);
+      return null;
+    }
   }
 
   /**
@@ -103,21 +128,22 @@ class SpotPricingEngine {
     // Build symbol-to-address map for resolving base token symbols
     const symbolMap = await this.buildSymbolMap(chainId);
 
-    // Strategy 1: Find a direct route to a USD stablecoin with cached pool
+    // Strategy 1: Find a direct route to a USD stablecoin with available pool
     let bestPoolAddress: string | null = null;
     let bestBaseSymbol: string | null = null;
     let bestBaseAddress: string | null = null;
 
-    // First, try to find a stablecoin base with a cached pool
+    // First, try to find a stablecoin base with an available pool
     for (const baseSymbol in tokenRoutes) {
       const baseAddress = symbolMap.get(baseSymbol);
       if (!baseAddress) continue;
       if (!this.isUsdStablecoin(baseAddress, chainId)) continue;
 
-      // This base is a USD stablecoin, check if any pool is cached
+      // This base is a USD stablecoin, try to fetch pool state
       const poolAddresses = tokenRoutes[baseSymbol];
       for (const poolAddr of poolAddresses) {
-        if (sharedStateCache.getPoolState(poolAddr)) {
+        const poolState = await this.getPoolState(poolAddr, chainId);
+        if (poolState) {
           bestPoolAddress = poolAddr;
           bestBaseSymbol = baseSymbol;
           bestBaseAddress = baseAddress;
@@ -128,13 +154,14 @@ class SpotPricingEngine {
       if (bestPoolAddress) break;
     }
 
-    // Strategy 2: If no stablecoin route with cache, try WETH
+    // Strategy 2: If no stablecoin route available, try WETH
     if (!bestPoolAddress) {
       const wethSymbol = 'WETH';
       if (tokenRoutes[wethSymbol]) {
         const poolAddresses = tokenRoutes[wethSymbol];
         for (const poolAddr of poolAddresses) {
-          if (sharedStateCache.getPoolState(poolAddr)) {
+          const poolState = await this.getPoolState(poolAddr, chainId);
+          if (poolState) {
             bestPoolAddress = poolAddr;
             bestBaseSymbol = wethSymbol;
             bestBaseAddress = symbolMap.get(wethSymbol) || null;
@@ -145,7 +172,7 @@ class SpotPricingEngine {
       }
     }
 
-    // Strategy 3: Try any route with a cached pool
+    // Strategy 3: Try any route with an available pool
     if (!bestPoolAddress) {
       for (const baseSymbol in tokenRoutes) {
         const baseAddress = symbolMap.get(baseSymbol);
@@ -153,7 +180,8 @@ class SpotPricingEngine {
 
         const poolAddresses = tokenRoutes[baseSymbol];
         for (const poolAddr of poolAddresses) {
-          if (sharedStateCache.getPoolState(poolAddr)) {
+          const poolState = await this.getPoolState(poolAddr, chainId);
+          if (poolState) {
             bestPoolAddress = poolAddr;
             bestBaseSymbol = baseSymbol;
             bestBaseAddress = baseAddress;
@@ -166,15 +194,18 @@ class SpotPricingEngine {
     }
 
     if (!bestPoolAddress || !bestBaseAddress) {
-      const cachedCount = Object.values(tokenRoutes).filter(pools => 
-        pools.some(p => sharedStateCache.getPoolState(p))
+      const availableCount = Object.values(tokenRoutes).filter(pools => 
+        pools.some(async p => {
+          const state = await this.getPoolState(p, chainId);
+          return state !== null;
+        })
       ).length;
-      console.log(`❌ [PRICING] ${tokenShort}... → NO CACHED POOLS (${cachedCount}/${Object.keys(tokenRoutes).length} base tokens have cached pools)`);
+      console.log(`❌ [PRICING] ${tokenShort}... → NO AVAILABLE POOLS (${availableCount}/${Object.keys(tokenRoutes).length} base tokens have accessible pools)`);
       return null;
     }
 
-    // Get pool state from cache
-    const poolState = sharedStateCache.getPoolState(bestPoolAddress);
+    // Get pool state (from cache or fresh)
+    const poolState = await this.getPoolState(bestPoolAddress, chainId);
     if (!poolState) {
       return null;
     }
@@ -217,4 +248,18 @@ class SpotPricingEngine {
   }
 }
 
-export const spotPricingEngine = new SpotPricingEngine();
+let spotPricingEngineInstance: SpotPricingEngine | null = null;
+
+export function initSpotPricingEngine(ethersAdapter: EthersAdapter): SpotPricingEngine {
+  spotPricingEngineInstance = new SpotPricingEngine(ethersAdapter);
+  return spotPricingEngineInstance;
+}
+
+export const spotPricingEngine = {
+  computeSpotPrice(tokenAddress: string, chainId: number) {
+    if (!spotPricingEngineInstance) {
+      throw new Error('SpotPricingEngine not initialized. Call initSpotPricingEngine first.');
+    }
+    return spotPricingEngineInstance.computeSpotPrice(tokenAddress, chainId);
+  }
+};
